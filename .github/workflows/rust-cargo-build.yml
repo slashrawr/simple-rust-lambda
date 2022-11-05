@@ -1,0 +1,32 @@
+name: rust-cargo-build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    env:
+      CARGO_TERM_COLOR: always
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Homebrew
+      uses: Homebrew/actions/setup-homebrew@master
+    - name: Add brew tap for cargo-lambda
+      run: brew tap cargo-lambda/cargo-lambda
+    - name: Install cargo-lambda
+      run: brew install cargo-lambda
+    - name: Cache target directory
+      id: cache-target-dir
+      uses: actions/cache@v3.0.11
+      with:
+        path: target
+        key: target-dir
+    - name: Build
+      if: steps.cache-target-dir.outputs.cache-hit != 'true'
+      run: cargo lambda build --release
+    - name: Run tests
+      run: cargo test --release --verbose

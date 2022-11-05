@@ -1,0 +1,5 @@
+export S3_KEY_ID=""
+export S3_KEY_SECRET=""
+export BUCKET=""
+export REGION=""
+export FILE_PATH=""

@@ -1,0 +1,59 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  S3KEYID:
+    Type: String
+  S3KEYSECRET:
+    Type: String
+  BUCKET:
+    Type: String
+  REGION:
+    Type: String
+  FILEPATH:
+    Type: String
+
+Resources:
+  SimpleRustLambdaApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Auth:
+        ApiKeyRequired: true
+        UsagePlan:
+          CreateUsagePlan: PER_API
+          Description: Usage plan for inspiration API.
+          Quota:
+            Limit: 500
+            Period: MONTH
+          Throttle:
+            BurstLimit: 100
+            RateLimit: 50
+      Cors:
+        AllowMethods: "'GET,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+        AllowOrigin: "'https://example.com'"
+        
+  RawrInspirationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      MemorySize: 128
+      Architectures: ["x86_64"]
+      Handler: handler
+      Runtime: provided.al2
+      Timeout: 5
+      CodeUri: target/lambda/simple-rust-lambda/
+      Environment:
+        Variables:
+          S3_KEY_ID: !Ref S3KEYID
+          S3_KEY_SECRET: !Ref S3KEYSECRET
+          BUCKET: !Ref BUCKET
+          REGION: !Ref REGION
+          FILE_PATH: !Ref FILEPATH
+      Events:
+        RawrInspirationApi:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SimpleRustLambdaApi
+            Path: /simple-rust-lambda/v1/
+            Method: GET

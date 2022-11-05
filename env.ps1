@@ -1,0 +1,5 @@
+$env:S3_KEY_ID=""
+$env:S3_KEY_SECRET=""
+$env:BUCKET=""
+$env:REGION=""
+$env:FILE_PATH=""

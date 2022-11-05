@@ -1,0 +1,28 @@
+name: sam-deploy
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Cache target directory
+      id: cache-target-dir
+      uses: actions/cache@v3.0.11
+      with:
+        path: target
+        key: target-dir
+    - name: Setup AWS SAM CLI
+      uses: aws-actions/setup-sam@v2
+    - name: Set AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.S3_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.S3_KEY_SECRET }}
+        aws-region: ${{ secrets.REGION }}
+    - name: Deploy
+      run: sam deploy -t ./template.yml --stack-name simplerustlambda --resolve-s3 --capabilities CAPABILITY_IAM --parameter-overrides ParameterKey=S3KEYID,ParameterValue=${{ secrets.S3_KEY_ID }} ParameterKey=S3KEYSECRET,ParameterValue=${{ secrets.S3_KEY_SECRET }} ParameterKey=BUCKET,ParameterValue=${{ secrets.BUCKET }} ParameterKey=REGION,ParameterValue=${{ secrets.REGION }} ParameterKey=FILEPATH,ParameterValue=${{ secrets.FILE_PATH }}
