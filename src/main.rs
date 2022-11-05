@@ -43,6 +43,31 @@ fn get_aws_client(region: &str) -> Result<Client, Error> {
     Ok(client)
 }
 
+async fn convert_bytes_to_string(stream: ByteStream) -> Vec<String> {
+    let b = stream
+        .collect()
+        .await
+        .expect("error")
+        .into_bytes();
+
+    let mut s = str::from_utf8(&b)
+        .unwrap()
+        .split("\n")
+        .map(|x| x.to_string())
+        .collect::<Vec<String>>();
+
+    return s;
+}
+
+fn get_random_line(text: Vec<String>) -> String {
+    let a = text
+        .choose(&mut thread_rng())
+        .unwrap()
+        .to_owned();
+
+    return a;
+}
+
 async fn func(event: LambdaEvent<Value>) -> Result<Value, Error> {
     let (event, _context) = event.into_parts();
     let region = env::var(REGION).context("Missing REGION")?;
@@ -52,20 +77,8 @@ async fn func(event: LambdaEvent<Value>) -> Result<Value, Error> {
     let client = get_aws_client(&region)?;
     let stream = download_object(&client, &bucket, &file_path).await;
 
-    let b = stream
-        .collect()
-        .await
-        .expect("error")
-        .into_bytes();
-
-    let s = str::from_utf8(&b)
-        .unwrap().split("\n")
-        .collect::<Vec<&str>>();
-    
-    let a = s
-        .choose(&mut thread_rng())
-        .copied()
-        .unwrap_or_default();
+    let text = convert_bytes_to_string(stream).await;
+    let line = get_random_line(text);
 
     let out  = json!({
         "statusCode": 200,
@@ -75,7 +88,7 @@ async fn func(event: LambdaEvent<Value>) -> Result<Value, Error> {
             "Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'",
             "Access-Control-Allow-Origin": "https://example.com"
         },
-        "body": format!("{{\"message\": \"{}\"}}",a.trim()),
+        "body": format!("{{\"message\": \"{}\"}}",line.trim()),
         "isBase64Encoded": false
     });
 
@@ -92,7 +105,7 @@ async fn main() -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aws_sdk_s3::model::ObjectAttributes::*;
+    use aws_sdk_s3::{model::ObjectAttributes::*, client::fluent_builders::GetObjectAttributes, output::GetObjectAttributesOutput, types::ByteStream};
 
     #[test]
     fn validate_env_vars() -> Result<(), Error> {
@@ -100,14 +113,14 @@ mod tests {
         let bucket = env::var(BUCKET).context("Missing BUCKET")?;
         let file_path = env::var(FILE_PATH).context("Missing FILE_PATH")?;
 
-        assert!(region!="");
-        assert!(bucket!="");
-        assert!(file_path!="");
+        assert_ne!(region,"");
+        assert_ne!(bucket,"");
+        assert_ne!(file_path,"");
         Ok(())
     }    
 
-    #[test]
-    fn valid_aws_client() -> Result<(), Error> {
+    #[tokio::test]
+    async fn valid_aws_client() -> Result<(), Error> {
         let region = env::var(REGION).context("Missing REGION")?;
         let client = get_aws_client(&region)?;
         Ok(())
@@ -133,15 +146,67 @@ mod tests {
 
     
     #[tokio::test]
-    async fn downloaded_file_has_size() -> Result<(), Error> {
+    async fn downloaded_file_size_check() -> Result<(), Error> {
         let region = env::var(REGION).context("Missing REGION")?;
         let bucket = env::var(BUCKET).context("Missing BUCKET")?;
         let file_path = env::var(FILE_PATH).context("Missing FILE_PATH")?;
 
         let client = get_aws_client(&region)?;
+        let file_attributes = client
+            .get_object_attributes()
+            .bucket(&bucket)
+            .key(&file_path)
+            .object_attributes(ObjectSize)
+            .send()
+            .await;
+
+        let size = file_attributes.unwrap().object_size();
         let stream = download_object(&client, &bucket, &file_path).await;
-        assert!(stream.collect().await.expect("error").into_bytes().len()>0);
+        let b = stream.collect().await.expect("error").into_bytes();
+
+        assert_eq!(b.len() as i64,size);
         Ok(())
     }
+
+    #[tokio::test]
+    async fn deserialize_stream() {
+        let string = "This is a\ntest string.\nIt will get\nturned into\nan array.";
+        let bytes = ByteStream::from_static(string.as_bytes());
+        
+        let deserialized = convert_bytes_to_string(bytes).await;
+        assert_eq!(string
+            .split("\n")
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>()
+            ,deserialized);
+    }
+
+    #[test]
+    fn random_line() {
+        let string = "This is a\ntest string.\nIt will get\nturned into\nan array.";
+
+        let str_array = string
+            .split("\n")
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>();
+
+        //get line
+        let s1 = get_random_line(str_array.clone());
+        assert!(str_array.contains(&s1));
+        
+        //random?
+        let mut i = 10;
+        let mut s2 = "".to_string();
+        while i > 0 {
+            s2 = get_random_line(str_array.clone());
+            if (s1==s2) {
+                i = i-1;
+            }
+            else {
+                assert!(true);
+                break;
+            }
+        }
+    }    
     
 }

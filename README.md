@@ -60,6 +60,11 @@ AmazonAPIGatewayAdministrator
  
 1. Install [Cargo Lambda](https://www.cargo-lambda.info/)
 2. Based on your preferred shell, update [env.ps1](env.ps1) or [env.sh](env.sh) file with valid values (described [here](#environment-variables))
+
+```
+DO NOT COMMIT THESE FILES TO VERSION CONTROL. RECOMMEND ADDING TO .gitignore.
+```
+
 3. In a terminal, run:
     
     `cargo lambda watch`
@@ -122,7 +127,7 @@ flowchart TD;
 
 ## Todo
 
-- [ ] Tool to generate env.* files based on prompts
+- [ ] Tool to generate env.* files based on prompts and automatically add to .gitignore
 - [ ] Enable/disable CORS in Lambda
 - [ ] Configurable log levels
 - [ ] Improve error handling
