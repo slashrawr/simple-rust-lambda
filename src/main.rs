@@ -48,18 +48,18 @@ fn get_aws_client(region: &str) -> Result<Client, Error> {
     Ok(client)
 }
 
-async fn convert_bytes_to_string(stream: ByteStream) -> Result<Vec<String>, Error> {
-    let b = stream
+async fn convert_bytes_to_strings(stream: ByteStream) -> Result<Vec<String>, Error> {
+    let bytes = stream
         .collect()
         .await?
         .into_bytes();
 
-    let mut s = str::from_utf8(&b)?
+    let strings = str::from_utf8(&bytes)?
         .split("\n")
         .map(|x| x.to_string())
         .collect::<Vec<String>>();
 
-    Ok(s)
+    Ok(strings)
 }
 
 fn get_random_line(text: Vec<String>) -> Result<String, String> {
@@ -83,7 +83,7 @@ async fn func(event: LambdaEvent<Value>) -> Result<Value, Error> {
     let client = get_aws_client(&region)?;
     let stream = download_object(&client, &bucket, &file_path).await?;
 
-    let text = convert_bytes_to_string(stream).await?;
+    let text = convert_bytes_to_strings(stream).await?;
     let line = get_random_line(text)?;
 
     let out  = json!({
@@ -177,14 +177,17 @@ mod tests {
     #[tokio::test]
     async fn deserialize_stream() {
         let string = "This is a\ntest string.\nIt will get\nturned into\nan array.";
-        let bytes = ByteStream::from_static(string.as_bytes());
+        let strings = vec![
+            "This is a".to_string(),
+            "test string.".to_string(), 
+            "It will get".to_string(), 
+            "turned into".to_string(), 
+            "an array.".to_string()];
+
+        let bytes = ByteStream::from_static(string.as_bytes()); 
+        let deserialized = convert_bytes_to_strings(bytes).await;
         
-        let deserialized = convert_bytes_to_string(bytes).await;
-        assert_eq!(string
-            .split("\n")
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>()
-            ,deserialized.expect("Error"));
+        assert_eq!(strings, deserialized.expect("Error"));
     }
 
     #[test]
