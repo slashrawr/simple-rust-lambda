@@ -13,59 +13,65 @@ const BUCKET: &str = "BUCKET";
 const REGION: &str = "REGION";
 const FILE_PATH: &str = "FILE_PATH";
 
-async fn download_object(client: &Client, bucket_name: &str, key: &str) -> ByteStream {
+async fn download_object(client: &Client, bucket_name: &str, key: &str) -> Result<ByteStream, Error> {
     let resp = client
         .get_object()
         .bucket(bucket_name)
         .key(key)
         .send()
-        .await;
-    resp.unwrap().body
+        .await?;
+    
+    Ok(resp.body)
 }
 
 fn get_aws_client(region: &str) -> Result<Client, Error> {
-    let key_id = env::var(ENV_CRED_KEY_ID)
-        .context("Missing S3_KEY_ID")?;
-    let key_secret = env::var(ENV_CRED_KEY_SECRET)
-        .context("Missing S3_KEY_SECRET")?;
+    let key_id = env::var(ENV_CRED_KEY_ID).context("Missing S3_KEY_ID")?;
+    let key_secret = env::var(ENV_CRED_KEY_SECRET).context("Missing S3_KEY_SECRET")?;
 
-    let cred = Credentials::new(key_id, key_secret, None, None, "loaded-from-custom-env");
+    let cred = Credentials::new(
+        key_id, 
+        key_secret, 
+        None, 
+        None, 
+        "loaded-from-custom-env");
 
     let region = Region::new(region.to_string());
+
     let conf_builder = config::Builder::new()
         .region(region)
         .credentials_provider(cred);
-    let conf = conf_builder
-        .build();
+
+    let conf = conf_builder.build();
 
     let client = Client::from_conf(conf);
 
     Ok(client)
 }
 
-async fn convert_bytes_to_string(stream: ByteStream) -> Vec<String> {
+async fn convert_bytes_to_string(stream: ByteStream) -> Result<Vec<String>, Error> {
     let b = stream
         .collect()
-        .await
-        .expect("error")
+        .await?
         .into_bytes();
 
-    let mut s = str::from_utf8(&b)
-        .unwrap()
+    let mut s = str::from_utf8(&b)?
         .split("\n")
         .map(|x| x.to_string())
         .collect::<Vec<String>>();
 
-    return s;
+    Ok(s)
 }
 
-fn get_random_line(text: Vec<String>) -> String {
-    let a = text
-        .choose(&mut thread_rng())
-        .unwrap()
-        .to_owned();
+fn get_random_line(text: Vec<String>) -> Result<String, String> {
+    let line = text
+        .choose(&mut thread_rng());
+        
+    let retline = match line {
+        Some(x) => x.to_owned(),
+        None => return Err("Failed to get random line.".to_string())
+    };
 
-    return a;
+    Ok(retline)
 }
 
 async fn func(event: LambdaEvent<Value>) -> Result<Value, Error> {
@@ -75,10 +81,10 @@ async fn func(event: LambdaEvent<Value>) -> Result<Value, Error> {
     let file_path = env::var(FILE_PATH).context("Missing FILE_PATH")?;
 
     let client = get_aws_client(&region)?;
-    let stream = download_object(&client, &bucket, &file_path).await;
+    let stream = download_object(&client, &bucket, &file_path).await?;
 
-    let text = convert_bytes_to_string(stream).await;
-    let line = get_random_line(text);
+    let text = convert_bytes_to_string(stream).await?;
+    let line = get_random_line(text)?;
 
     let out  = json!({
         "statusCode": 200,
@@ -96,7 +102,7 @@ async fn func(event: LambdaEvent<Value>) -> Result<Value, Error> {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<(), lambda_runtime::Error> {
     let func = service_fn(func);
     lambda_runtime::run(func).await?;
     Ok(())
@@ -161,10 +167,10 @@ mod tests {
             .await;
 
         let size = file_attributes.unwrap().object_size();
-        let stream = download_object(&client, &bucket, &file_path).await;
-        let b = stream.collect().await.expect("error").into_bytes();
+        let stream = download_object(&client, &bucket, &file_path).await?;
+        let bytes = stream.collect().await.expect("Failed to get bytes from ByteStream").into_bytes();
 
-        assert_eq!(b.len() as i64,size);
+        assert_eq!(bytes.len() as i64,size);
         Ok(())
     }
 
@@ -178,7 +184,7 @@ mod tests {
             .split("\n")
             .map(|x| x.to_string())
             .collect::<Vec<String>>()
-            ,deserialized);
+            ,deserialized.expect("Error"));
     }
 
     #[test]
@@ -191,14 +197,14 @@ mod tests {
             .collect::<Vec<String>>();
 
         //get line
-        let s1 = get_random_line(str_array.clone());
+        let s1 = get_random_line(str_array.clone()).expect("Error");
         assert!(str_array.contains(&s1));
         
         //random?
         let mut i = 10;
         let mut s2 = "".to_string();
         while i > 0 {
-            s2 = get_random_line(str_array.clone());
+            s2 = get_random_line(str_array.clone()).expect("Error");
             if (s1==s2) {
                 i = i-1;
             }
