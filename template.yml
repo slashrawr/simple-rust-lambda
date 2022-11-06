@@ -14,7 +14,7 @@ Parameters:
     Type: String
 
 Resources:
-  SimpleRustLambdaApi:
+  SimpleRustLambdaGatewayApi:
     Type: AWS::Serverless::Api
     Properties:
       StageName: prod
@@ -34,7 +34,7 @@ Resources:
         AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
         AllowOrigin: "'https://example.com'"
         
-  RawrInspirationFunction:
+  SimpleRustLambdaFunction:
     Type: AWS::Serverless::Function
     Properties:
       MemorySize: 128
@@ -51,9 +51,9 @@ Resources:
           REGION: !Ref REGION
           FILE_PATH: !Ref FILEPATH
       Events:
-        RawrInspirationApi:
+        SimpleRustLambdaApi:
           Type: Api
           Properties:
-            RestApiId: !Ref SimpleRustLambdaApi
+            RestApiId: !Ref SimpleRustLambdaGatewayApi
             Path: /simple-rust-lambda/v1/
             Method: GET
